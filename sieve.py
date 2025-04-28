@@ -22,7 +22,7 @@ def sha1(x: str) -> str:
 
 def mermaid_compile(src: str, dst: Path) -> None:
     proc = subprocess.Popen(
-        ["mmdc", "-i", "-", "-o", dst, "-w1000", "-H", "1600"],
+        ["mmdc", "-i", "-", "-o", dst, "-w", "1920", "-H", "1080", "-b", "transparent", "-f"],
         stdin=subprocess.PIPE,
         stdout=sys.stderr,
         stderr=sys.stderr,
@@ -37,8 +37,7 @@ def mermaid(elem: Element, doc: Doc) -> Para | None:
     if type(elem) is CodeBlock and "mermaid" in elem.classes:
         code = elem.text
 
-        # filetype = {"html": "png", "latex": "pdf"}.get(doc.format, "png")
-        filetype = "png"
+        filetype = {"html": "png", "latex": "pdf"}.get(doc.format, "png")
         PATH_MERMAID.mkdir(parents=True, exist_ok=True)
 
         outfile = (PATH_MERMAID / sha1(code)).with_suffix(f".{filetype}")
