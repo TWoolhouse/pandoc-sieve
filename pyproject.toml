@@ -1,0 +1,11 @@
+[project]
+name = "pandoc-sieve"
+version = "0.1.0"
+description = "A simple [Pandoc](https://pandoc.org/) filter for generating mermaid diagrams within `mermaid` code blocks."
+authors = [{ name = "Thomas Woolhouse" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["panflute>=2.3.1"]
+
+[project.scripts]
+sieve-mermaid = "sieve:main_mermaid"
