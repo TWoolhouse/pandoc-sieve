@@ -7,13 +7,13 @@ Images are put in a temporary directory.
 import hashlib
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import panflute
 from panflute import Caption, CodeBlock, Doc, Element, Figure, Image, Plain, run_filter
 
-PATH_BUILD = (Path(tempfile.gettempdir()) / "pandoc-sieve").resolve()
+from .paths import PATH_BUILD
+
 PATH_MERMAID = PATH_BUILD / "mermaid"
 
 
@@ -82,5 +82,5 @@ def mermaid(elem: Element, doc: Doc) -> Element | None:
     return None
 
 
-def main_mermaid(doc=None):
+def main(doc=None):
     return run_filter(mermaid, doc=doc)
