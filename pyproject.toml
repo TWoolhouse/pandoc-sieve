@@ -5,7 +5,8 @@ description = "A simple [Pandoc](https://pandoc.org/) filter for generating merm
 authors = [{ name = "Thomas Woolhouse" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["panflute>=2.3.1"]
+dependencies = ["panflute>=2.3.1", "pyyaml>=6.0.2"]
 
 [project.scripts]
-sieve-mermaid = "sieve:main_mermaid"
+sieve-mermaid = "sieve.mermaid:main"
+mdoc = "sieve.build:main"
