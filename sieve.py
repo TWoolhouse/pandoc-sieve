@@ -10,7 +10,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from panflute import CodeBlock, Doc, Element, Image, Para, run_filter
+import panflute
+from panflute import Caption, CodeBlock, Doc, Element, Figure, Image, Plain, run_filter
 
 PATH_BUILD = (Path(tempfile.gettempdir()) / "pandoc-sieve").resolve()
 PATH_MERMAID = PATH_BUILD / "mermaid"
@@ -22,7 +23,7 @@ def sha1(x: str) -> str:
 
 def mermaid_compile(src: str, dst: Path) -> None:
     proc = subprocess.Popen(
-        ["mmdc", "-i", "-", "-o", dst, "-w", "1920", "-H", "1080", "-b", "transparent", "-f"],
+        ["mmdc", "-i", "-", "-o", dst, "-w", "1920", "-H", "1080", "-b", "transparent", "-f"],  # noqa: S607
         stdin=subprocess.PIPE,
         stdout=sys.stderr,
         stderr=sys.stderr,
@@ -33,18 +34,50 @@ def mermaid_compile(src: str, dst: Path) -> None:
         raise RuntimeError(f"Failed to compile mermaid code: {src}")
 
 
-def mermaid(elem: Element, doc: Doc) -> Para | None:
+def mermaid(elem: Element, doc: Doc) -> Element | None:
+    """Convert mermaid code blocks to images.
+
+    ```mermaid{#ref-id caption="Diagram caption" alt="Diagram alt text" title="Diagram title"}
+    graph TD;
+        A-->B;
+    ```
+    """
+
     if type(elem) is CodeBlock and "mermaid" in elem.classes:
         code = elem.text
+        filetype = {
+            "html": "svg",
+            "markdown": "svg",
+            "pdf": "pdf",
+            "latex": "pdf",
+        }.get(doc.format, "png")
 
-        filetype = {"html": "png", "latex": "pdf"}.get(doc.format, "png")
         PATH_MERMAID.mkdir(parents=True, exist_ok=True)
-
         outfile = (PATH_MERMAID / sha1(code)).with_suffix(f".{filetype}")
 
         mermaid_compile(code, outfile)
         print(f"Mermaid: {outfile}", file=sys.stderr)
-        return Para(Image(url=str(outfile)))
+
+        caption = (
+            Caption(*panflute.convert_text(caption_text))
+            if (caption_text := elem.attributes.pop("caption", None))
+            else None
+        )
+
+        alt = panflute.convert_text(alt_text) if (alt_text := elem.attributes.pop("alt", None)) else None
+        image = Image(
+            *(alt[0].content if alt is not None else ()),
+            url=str(outfile),
+            title=elem.attributes.pop("title", ""),
+            attributes=elem.attributes,
+            classes=elem.classes,
+        )
+
+        return Figure(
+            Plain(image),
+            caption=caption,
+            identifier=elem.identifier,
+        )
 
     return None
 
