@@ -1,4 +1,5 @@
 import argparse
+import io
 import subprocess
 import sys
 import traceback
@@ -55,29 +56,45 @@ def using_defaults(defaults: dict[str, Any]) -> Generator[Path]:
             path.unlink(missing_ok=True)  # pyright: ignore[reportPossiblyUnboundVariable]
 
 
-def pandoc_output(inp: Path, out: Path, stdout: str, stderr: str, *extras: str) -> str:
+def pandoc_output_details(stdout: str, stderr: str, *extras: str) -> str:
     extra = "\n".join(chain(map(str.strip, extras), (stdout.strip(), stderr.strip()))).strip()
     if extra:
         extra = "\n    ".join(chain(":", extra.splitlines()))
-    return f"pandoc {inp} -> {out}{extra}"
+    return extra
+
+
+def pandoc_output(inp: Path, out: Path) -> str:
+    return f"pandoc {inp} -> {out}"
 
 
 @from_namespace
 def main_from_markdown(input: Path, type: str, **_) -> None:  # noqa: A002, ANN003
     outfile = input.with_suffix(f".{type}")
+    print(pandoc_output(input, outfile), end="", file=sys.stderr)
 
-    fm = frontmatter(input.read_text(encoding="utf-8"))
+    try:
+        fm = frontmatter(input.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        fm = {}
+        buf = io.StringIO()
+        traceback.print_exc(limit=1, file=buf, chain=False)
+
+        print(
+            ":\n    Unable to find frontmatter:\n         "
+            + "\n        ".join(chain((str(e.__class__.__name__),), str(e).splitlines())),
+            file=sys.stderr,
+        )
     while True:
         try:
             with using_defaults(fm) as filepath:
                 proc = pandoc(input, outfile, "--defaults", str(filepath))
-            print(pandoc_output(input, outfile, proc.stdout, proc.stderr), file=sys.stderr)
+            print(pandoc_output_details(proc.stdout, proc.stderr, yaml.dump(fm)), file=sys.stderr)
             break
         except subprocess.CalledProcessError as e:
             res: str = e.stderr
             if (idx := res.rfind("Unknown option")) == -1:
                 print(
-                    pandoc_output(input, outfile, e.stdout, e.stderr, yaml.dump(fm)),
+                    pandoc_output_details(e.stdout, e.stderr, yaml.dump(fm)),
                     file=sys.stderr,
                 )
                 raise
