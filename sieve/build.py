@@ -44,6 +44,7 @@ def pandoc(src: Path, dest: Path, *args: str) -> subprocess.CompletedProcess[str
 
 @contextmanager
 def using_defaults(defaults: dict[str, Any]) -> Generator[Path]:
+    PATH_BUILD.mkdir(parents=True, exist_ok=True)
     try:
         with NamedTemporaryFile(
             "w", encoding="utf-8", prefix="build.", suffix=".yml", dir=PATH_BUILD, delete=False
