@@ -108,7 +108,7 @@ def outline_as_tree(outline: Iterator[tuple[int, str]]) -> list[str | dict[str, 
 @from_namespace
 def main_from_markdown(input: Path, type: str, show_outline: bool, **_) -> None:  # noqa: A002
     outfile = input.with_suffix(f".{type}")
-    print(pandoc_output(input, outfile), end="", file=sys.stderr)
+    print(pandoc_output(input, outfile), end="", file=sys.stderr, flush=True)
 
     input_content = input.read_text(encoding="utf-8")
 
