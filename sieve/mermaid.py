@@ -37,7 +37,7 @@ def mermaid_compile(src: str, dst: Path) -> None:
 def mermaid(elem: Element, doc: Doc) -> Element | None:
     """Convert mermaid code blocks to images.
 
-    ```mermaid{#ref-id caption="Diagram caption" alt="Diagram alt text" title="Diagram title"}
+    ```mermaid {#ref-id caption="Diagram caption" alt="Diagram alt text" title="Diagram title"}
     graph TD;
         A-->B;
     ```
@@ -64,20 +64,28 @@ def mermaid(elem: Element, doc: Doc) -> Element | None:
             else None
         )
 
-        alt = panflute.convert_text(alt_text) if (alt_text := elem.attributes.pop("alt", None)) else None
+        alt = (
+            panflute.convert_text(alt_text)
+            if (alt_text := elem.attributes.pop("alt", None))
+            else panflute.convert_text(caption_text if caption_text else "Mermaid Diagram")
+        )
         image = Image(
-            *(alt[0].content if alt is not None else ()),
+            # Convert alt Para to inlines
+            *((alt[0].content) if alt is not None else ()),
             url=str(outfile),
             title=elem.attributes.pop("title", ""),
             attributes=elem.attributes,
             classes=elem.classes,
+            identifier=elem.identifier if caption is not None else "",
         )
 
-        return Figure(
-            Plain(image),
-            caption=caption,
-            identifier=elem.identifier,
-        )
+        if caption is not None:
+            return Figure(
+                Plain(image),
+                caption=caption,
+                identifier=elem.identifier,
+            )
+        return Plain(image)
 
     return None
 
