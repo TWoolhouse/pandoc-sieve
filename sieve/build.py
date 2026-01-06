@@ -1,34 +1,36 @@
 import argparse
 import io
+import re
 import subprocess
 import sys
 import traceback
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager, suppress
 from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Concatenate
+from typing import Any
 
 import yaml
 
 from .paths import PATH_BUILD
 
 
-def from_namespace[**A, R](func: Callable[Concatenate[A], R]) -> Callable[[argparse.Namespace], R]:
+def from_namespace[**A, R](func: Callable[A, R]) -> Callable[[argparse.Namespace], R]:
     def decorator(args: argparse.Namespace) -> R:
         return func(**vars(args))  # pyright: ignore[reportCallIssue]
 
     return decorator
 
 
-def frontmatter(markdown: str) -> dict[str, Any]:
+def frontmatter(markdown: str) -> tuple[dict[str, Any], str]:
     MARKER = "---"
     markdown = markdown.strip()
     if markdown.startswith(MARKER):
         mapping = markdown[len(MARKER) : markdown.find(MARKER, len(MARKER))]
-        return yaml.safe_load(mapping)
-    return {}
+        markdown = markdown[len(mapping) + 2 * len(MARKER) :].lstrip()
+        return yaml.safe_load(mapping), markdown
+    return {}, markdown
 
 
 def pandoc(src: Path, dest: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -68,13 +70,50 @@ def pandoc_output(inp: Path, out: Path) -> str:
     return f"pandoc {inp} -> {out}"
 
 
+RE_MARKDOWN_HEADER = re.compile(r"^(#{1,6})\s+(.*)$", re.MULTILINE)
+
+
+def outline_markdown(markdown: str) -> Generator[tuple[int, str]]:
+    for match in RE_MARKDOWN_HEADER.finditer(markdown):
+        level = len(match.group(1))
+        title = match.group(2).strip()
+        yield (level, title)
+
+
+def outline_as_tree(outline: Iterator[tuple[int, str]]) -> list[str | dict[str, Any]]:
+    type Node = dict[str, Any]
+    tree: Node = {}
+    stack: list[tuple[int, Node]] = [(0, tree)]
+
+    for level, title in outline:
+        node: Node = {}
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        parent = stack[-1][1]
+        parent[title] = node
+        stack.append((level, node))
+
+    def _flat_tree(node: Node) -> list[str | Node]:
+        result: list[str | Node] = []
+        for key, value in node.items():
+            if not value:
+                result.append(key)
+            else:
+                result.append({key: _flat_tree(value)})
+        return result
+
+    return _flat_tree(tree)
+
+
 @from_namespace
-def main_from_markdown(input: Path, type: str, **_) -> None:  # noqa: A002, ANN003
+def main_from_markdown(input: Path, type: str, show_outline: bool, **_) -> None:  # noqa: A002
     outfile = input.with_suffix(f".{type}")
     print(pandoc_output(input, outfile), end="", file=sys.stderr)
 
+    input_content = input.read_text(encoding="utf-8")
+
     try:
-        fm = frontmatter(input.read_text(encoding="utf-8"))
+        fm, input_content = frontmatter(input_content)
     except yaml.YAMLError as e:
         fm = {}
         buf = io.StringIO()
@@ -89,7 +128,12 @@ def main_from_markdown(input: Path, type: str, **_) -> None:  # noqa: A002, ANN0
         try:
             with using_defaults(fm) as filepath:
                 proc = pandoc(input, outfile, "--defaults", str(filepath))
-            print(pandoc_output_details(proc.stdout, proc.stderr, yaml.dump(fm)), file=sys.stderr)
+
+            outline = outline_as_tree(outline_markdown(input_content)) if show_outline else {}
+            print(
+                pandoc_output_details(proc.stdout, proc.stderr, yaml.dump(fm), yaml.dump({"outline": outline})),
+                file=sys.stderr,
+            )
             break
         except subprocess.CalledProcessError as e:
             res: str = e.stderr
@@ -113,6 +157,9 @@ def cli() -> argparse.ArgumentParser:
     parser.set_defaults(py_main=main_from_markdown)
     parser.add_argument("input", type=as_path, help="Input markdown file")
     parser.add_argument("-t", "--type", type=str, default="pdf", help="Output file type (e.g., pdf, docx)")
+    parser.add_argument(
+        "--no-outline", action="store_false", dest="show_outline", default=True, help="Show outline of the document"
+    )
 
     return parser
 
